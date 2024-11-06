@@ -40,3 +40,19 @@ implementation for these modules. You should NOT modify them. They are:
 
 
 */
+
+
+Parts to complete:
+
+  Mohamud:
+      - Branch
+      - store
+      - loadI
+      - auipc
+      - Jal
+      - JalR
+  Yafet:
+    - all computes
+    - all compute immediates
+    - load
+    
