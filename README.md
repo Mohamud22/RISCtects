@@ -55,12 +55,20 @@ Parts to complete:
     - all computes
     - all compute immediates
     - load
-    
+
+STORE: 
+
+ //STORE
+ 
+   MEM[Rsrc1+imm][0:7] = Rsrc2[0:7];    //store byte
+   MEM[Rsrc1+imm] = Rsrc2;                //store word
+   MEM[Rsrc1+imm][0:15] = Rsrc2[0:15];   //store half word
+
 Branch:
 
 
 wire [31:0] next_Branch;
- // BRANCH  / section 2.7 of the book
+ // BRANCH  
  assign bne_result = (Rsrc1!=Rsrc2);
  assign beq_result = (Rsrc1== Rsrc2)
  assign blt_result =($signed(Rsrc1) < $signed(Rsrc2)); // not sure if we could use "signed" 
