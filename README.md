@@ -56,3 +56,15 @@ Parts to complete:
     - all compute immediates
     - load
     
+Branch:
+wire [31:0] next_Branch;
+ // BRANCH  / section 2.7 of the book
+ assign bne_result = (Rsrc1!=Rsrc2);
+ assign beq_result = (Rsrc1== Rsrc2)
+ assign blt_result =($signed(Rsrc1) < $signed(Rsrc2)); // not sure if we could use "signed" 
+ assign bge_result = ($signed(Rsrc1) >= $signed(Rsrc2));
+ assign bltu_result = (Rsrc1 < Rsrc2);
+ assign bgeu_result = (Rsrc1 >= Rsrc2);
+ //next_Branch address
+ assign next_Branch = PC +(imm << 1); // shift imm by 1 bit to the left 
+ 
