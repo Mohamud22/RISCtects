@@ -90,3 +90,4 @@ assign rd = PC + 4;                    // Store the return address in the destin
 assign NPC = (Rsrc1 + imm) & ~32'h1;  // Calculate the next address, clear the LSB for alignment
 
  
+( We might need to match rd with proper declaration of destination register address)
