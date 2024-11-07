@@ -77,4 +77,16 @@ wire [31:0] next_Branch;
  assign bgeu_result = (Rsrc1 >= Rsrc2);
  //next_Branch address
  assign next_Branch = PC +(imm << 1); // shift imm by 1 bit to the left 
+
+ JL and JALR:
+
+
+                // jump and link; jal rd, imm 
+assign rd = PC + 4;              // Store the return address in rd 
+assign PC_next = (PC + imm);    // Update PC to the jump target address
+
+                 // jump and link register ; rd, rs1, imm 
+assign rd = PC + 4;                    // Store the return address in the destination register rd
+assign NPC = (Rsrc1 + imm) & ~32'h1;  // Calculate the next address, clear the LSB for alignment
+
  
