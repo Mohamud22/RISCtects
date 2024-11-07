@@ -57,6 +57,8 @@ Parts to complete:
     - load
     
 Branch:
+
+
 wire [31:0] next_Branch;
  // BRANCH  / section 2.7 of the book
  assign bne_result = (Rsrc1!=Rsrc2);
