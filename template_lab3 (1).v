@@ -1,7 +1,7 @@
 // Template for Northwestern - CompEng 361 - Lab3 -- Version 1.1
 // Groupname: RISChitects
 // NetIDs: yah9076 ; ....
-
+// to run the code: /vol/eecs362/iverilog-new/bin/iverilog -o RISChitects_execute /home/yah9076/361labs/lab3/RISChitects_lab3.v lab3_tb.v
 /* to design a single cycle RISC-V CPU which implements the majority of the RV32IM Base Instruction Set. You will eventually use this in the
 final lab to implement a pipelined processor. Follow the RISC-V documentation links on Canvas
 to learn the instruction encodings and functionality. The specific instructions that you must support are:
@@ -38,8 +38,6 @@ simulation and dump system state into files. We will evaluate the correctness of
 by evaluating the contents of these files.
 Your single cycle CPU design should instantiate two library modules. We provide the
 implementation for these modules. You should NOT modify them. They are:
-
-
 
 */
 
@@ -136,7 +134,7 @@ implementation for these modules. You should NOT modify them. They are:
 `define AUX_FUNC_SRA_I     7'b0100000    // sra, srai
 `define AUX_FUNC_SLLI      7'b0000000     // slli
 `define AUX_FUNC_SRL       7'b0000000     // srl
-
+`define AUX_FUNC_SRLI      7'b0000000     // slri
 `define SIZE_BYTE  2'b00
 `define SIZE_HWORD 2'b01
 `define SIZE_WORD  2'b10
@@ -250,7 +248,7 @@ implementation for these modules. You should NOT modify them. They are:
    // validity check for compute immediates (addi, slti, sltiu, xori, ori, andi, slli, srli, srai)
    wire invalid_CommI = !((opcode == `OPCODE_COMPUTE_IMM) && (
                      (funct3 == `FUNC_ADDI) || (funct3 == `FUNC_SLTI) || (funct3 == `FUNC_SLTIU) || (funct3 == `FUNC_XORI) || (funct3 == `FUNC_ORI) || (funct3 == `FUNC_ANDI) || 
-                     ((funct3 == `FUNC_SLLI) && (funct7 == `AUX_FUNC_SLLI)) || ((funct3 == `FUNC_SRLI_SRAI) && ((funct7 == `FUNC7_SRLI) || (funct7 == `FUNC7_SRAI))) ));
+                     ((funct3 == `FUNC_SLLI) && (funct7 == `AUX_FUNC_SLLI)) || ((funct3 == `FUNC_SRLI_SRAI) && ((funct7 == `AUX_FUNC_SRA_I) || (funct7 == `AUX_FUNC_SRLI))) ));
 
    // validity check for loads lb, lh, lw, lbu, lhu
    wire invalid_load = !((opcode == `OPCODE_LOAD) && 
@@ -312,8 +310,8 @@ implementation for these modules. You should NOT modify them. They are:
    assign funct7 = InstWord[31:25];  // auxfunc7 for R-Type
 
    assign MemWrEn = (opcode == `OPCODE_STORE); // Change this to allow stores, it allows stores
-   assign RWrEn = !halt && (((opcode == OPCODE_COMPUTE) || (opcode == OPCODE_COMPUTE_IMM) || (opcode == OPCODE_LOAD) || (opcode == OPCODE_JAL) || 
-                  (opcode == OPCODE_JALR) || (opcode == OPCODE_LUI) || (opcode == OPCODE_AUIPC)));  // At the moment every instruction will write to the register file
+   assign RWrEn = !halt && (((opcode == `OPCODE_COMPUTE) || (opcode == `OPCODE_COMPUTE_IMM) || (opcode == `OPCODE_LOAD) || (opcode == `OPCODE_JAL) || 
+                  (opcode == `OPCODE_JALR) || (opcode == `OPCODE_LUI) || (opcode == `OPCODE_AUIPC)));  // At the moment every instruction will write to the register file
    assign DataAddr = Rdata1 + immediate;
    assign StoreData = Rdata2;
 
@@ -339,11 +337,13 @@ endmodule // SingleCycleCPU
 
 // Incomplete version of Lab2 execution unit
 // You will need to extend it. Feel free to modify the interface also
-module ExecutionUnit(out, opA, opB, func, auxFunc);
+module ExecutionUnit(out, opA, opB, func, auxFunc, opcode, immediate);
    output [`WORD_WIDTH-1:0] out;
    input [`WORD_WIDTH-1:0]  opA, opB;
    input [2:0] 	 func;
    input [6:0] 	 auxFunc;
+   input [6:0]   opcode;
+   input [`WORD_WIDTH-1:0] immediate;
 
    // for computes
    wire [`WORD_WIDTH-1:0] 	 addsub_result, or_result, and_result, sll_result, slt_result, sltu_result, srl_result, sra_result,
@@ -413,9 +413,9 @@ module ExecutionUnit(out, opA, opB, func, auxFunc);
                            (func == `FUNC_REM) ? rem_result : (func == `FUNC_REMU) ? remu_result : 32'hXXXXXXXX 
                                     ):
                (opcode == `OPCODE_COMPUTE_IMM) ? (
-                           (func == `FUNC_ADDI) ? addi_result : (func = `FUNC_SLTI) ? slti_result : (func == `FUNC_SLTIU) ? sltiu_result :
-                           (func == `FUNC_XORI) ? xori_result : (func = `FUNC_ORI) ? ori_result : 
-                           (func == `FUNC_ANDI) ? andi_result : (func == `FUNC_SLLI) ? slli_result : (func = `FUNC_SRLI_SRAI) ? ((auxFunc == `AUX_FUNC_SRA_I) ? srai_result :srli_result) : 32'hXXXXXXXX
-                           ):
-
+                           (func == `FUNC_ADDI) ? addi_result : (func == `FUNC_SLTI) ? slti_result : (func == `FUNC_SLTIU) ? sltiu_result :
+                           (func == `FUNC_XORI) ? xori_result : (func == `FUNC_ORI) ? ori_result : 
+                           (func == `FUNC_ANDI) ? andi_result : (func == `FUNC_SLLI) ? slli_result : (func == `FUNC_SRLI_SRAI) ? ((auxFunc == `AUX_FUNC_SRA_I) ? srai_result :srli_result)
+                            : 32'hXXXXXXXX
+              ) : 32'hXXXXXXXX;
 endmodule // ExecutionUnit
