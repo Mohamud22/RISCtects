@@ -91,3 +91,21 @@ assign NPC = (Rsrc1 + imm) & ~32'h1;  // Calculate the next address, clear the L
 
  
 ( We might need to match rd with proper declaration of destination register address)
+
+
+
+datapath:
+
+  wire [11:0] target_address;
+// datapath
+   // Fetch Address Datapath
+   assign PC_Plus_4 = PC + 4;
+   assign NPC = PC_Plus_4;
+
+   // branch and jump
+   assign PC_plus_4 = (opcode != `JMP_OPCODE && opcode != `OPCODE_BRANCH) ? (PC + 4): // not branch not jump
+   //assign NPC = (opcode == `JMP_OPCODE) ? SR1_out : PC_plus_4;
+   assign PC_plus_4 = (opcode == `OPCODE_JALR)? (Rsrc1+imm[11:0]):PC_Plus_4; // Jump And Link Register or indirect jump
+   assign PC_Plus_4 = (opcode== `OPCODE_BRANCH)? next_Branch: // branch 
+   assign PC_Plus_4 = (opcode == JMP_OPCODE)? target_address: // jump  or direct jump
+   
