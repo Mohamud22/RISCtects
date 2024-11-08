@@ -14,7 +14,7 @@ Control instructions:
 /// memory instructions
             lb, lh, lw, lbu, lhu
             sb, sh, sw
-
+	    
 /// compute instructions:
             addi, slti, sltiu
             xori, ori, andi
