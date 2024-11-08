@@ -11,7 +11,7 @@ Control instructions:
             jal, jalr,
             beq, bne, blt, bge, bltu, bgeu
 
-/// memory instructions:
+/// memory instructions
             lb, lh, lw, lbu, lhu
             sb, sh, sw
 
