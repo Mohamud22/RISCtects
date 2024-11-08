@@ -72,7 +72,7 @@ implementation for these modules. You should NOT modify them. They are:
 `define OPCODE_LOAD       7'b0000011      // for I type loads (lb, lh, lw, lbu, lhu)
 `define OPCODE_STORE      7'b0100011      // for S type stores (sb, sh, sw)
 
-`define OPCODE_LOADI      7'b0110111      // load immediate ; lui rd, imm
+`define OPCODE_LUI      7'b0110111      // load immediate ; lui rd, imm
 `define OPCODE_AUIPC      7'b0010111      // add upper imm to PC;  auipc rd, imm
 `define OPCODE_JAL        7'b1101111      // jump and link; jal rd, imm
 `define OPCODE_JALR       7'b1100111      // jump and link register ; rd, rs1, imm
@@ -143,44 +143,42 @@ implementation for these modules. You should NOT modify them. They are:
 
 
 
-// module Mem(InstAddr, InstOut, DataAddr, DataSize, DataIn, DataOut, WEN, CLK);
-// module RegFile(AddrA, DataOutA, AddrB, DataOutB, AddrW, DataInW, WenW, CLK);
 
-module SingleCycleCPU(halt, clk, rst);
-   output halt;
-   input clk, rst;
-   
-   wire [`WORD_WIDTH-1:0] PC, InstWord;
-   wire [`WORD_WIDTH-1:0] DataAddr, StoreData, DataWord;
-   wire [1:0]  MemSize;
-   wire        MemWrEn;
+   module SingleCycleCPU(halt, clk, rst);
+      output halt;
+      input clk, rst;
+      
+      wire [`WORD_WIDTH-1:0] PC, InstWord;
+      wire [`WORD_WIDTH-1:0] DataAddr, StoreData, DataWord;
+      wire [1:0]  MemSize;
+      wire        MemWrEn;
 
-   wire [4:0]  Rsrc1, Rsrc2, Rdst;
-   wire [`WORD_WIDTH-1:0] Rdata1, Rdata2, RWrdata;
-   wire        RWrEn;
+      wire [4:0]  Rsrc1, Rsrc2, Rdst;
+      wire [`WORD_WIDTH-1:0] Rdata1, Rdata2, RWrdata;
+      wire        RWrEn;
 
-   wire [`WORD_WIDTH-1:0] NPC, PC_Plus_4;
-   wire [6:0]  opcode;
+      wire [`WORD_WIDTH-1:0] NPC, PC_Plus_4;
+      wire [6:0]  opcode;
 
-   wire [6:0]  funct7;
-   wire [2:0]  funct3;
+      wire [6:0]  funct7;
+      wire [2:0]  funct3;
 
-   wire RegWrite, MemRead, Jump, ALUSrc, MemToReg;     // additional control signals
+      wire RegWrite, MemRead, Jump, ALUSrc, MemToReg;     // additional control signals
 
-   // immediate extraction for i, u, s, b, j instructions according to their RISC32M IS
-   wire [`WORD_WIDTH-1:0] immediate_i = {{20{InstWord[31]}}, InstWord[31:20]};   // sign extend the MSB
-   wire [`WORD_WIDTH-1:0] immediate_u = {InstWord[31:12], 12'b0};       // sign extend the MSB
-   wire [`WORD_WIDTH-1:0] immediate_s = {{20{InstWord[31]}}, InstWord[31:25], InstWord[11:7]};      // sign extend the MSB  
-   wire [`WORD_WIDTH-1:0] immediate_b = {{20{InstWord[31]}}, InstWord[7], InstWord[30:25], InstWord[11:8], 1'b0};
-   wire [`WORD_WIDTH-1:0] immediate_j = {{12{InstWord[31]}}, InstWord[19:12], InstWord[20], InstWord[30:21], 1'b0};      // sign extend the MSB  
+      // immediate extraction for i, u, s, b, j instructions according to their RISC32M IS
+      wire [`WORD_WIDTH-1:0] immediate_i = {{20{InstWord[31]}}, InstWord[31:20]};   // sign extend the MSB
+      wire [`WORD_WIDTH-1:0] immediate_u = {InstWord[31:12], 12'b0};       // sign extend the MSB
+      wire [`WORD_WIDTH-1:0] immediate_s = {{20{InstWord[31]}}, InstWord[31:25], InstWord[11:7]};      // sign extend the MSB  
+      wire [`WORD_WIDTH-1:0] immediate_b = {{20{InstWord[31]}}, InstWord[7], InstWord[30:25], InstWord[11:8], 1'b0};
+      wire [`WORD_WIDTH-1:0] immediate_j = {{12{InstWord[31]}}, InstWord[19:12], InstWord[20], InstWord[30:21], 1'b0};      // sign extend the MSB  
 
-   // to choose the correct immediate value
-   wire [`WORD_WIDTH-1:0] immediate = (opcode == `OPCODE_COMPUTE_IMM || opcode == `OPCODE_LOAD || opcode == `OPCODE_JALR) ? immediate_i :
-                        (opcode == `OPCODE_STORE) ? immediate_s : (opcode == `OPCODE_BRANCH) ? immediate_b :
-                        (opcode == `OPCODE_JAL) ? immediate_j : (opcode == `OPCODE_LOADI || opcode == `OPCODE_AUIPC) ? immediate_u : 32'b0;
-   /*---------------------------------control------------------------------*/
-   // read from memory if load instruction
-   assign MemRead = (opcode == `OPCODE_LOAD);
+      // to choose the correct immediate value
+      wire [`WORD_WIDTH-1:0] immediate = (opcode == `OPCODE_COMPUTE_IMM || opcode == `OPCODE_LOAD || opcode == `OPCODE_JALR) ? immediate_i :
+                           (opcode == `OPCODE_STORE) ? immediate_s : (opcode == `OPCODE_BRANCH) ? immediate_b :
+                           (opcode == `OPCODE_JAL) ? immediate_j : (opcode == `OPCODE_LUI || opcode == `OPCODE_AUIPC) ? immediate_u : 32'b0;
+      /*---------------------------------control------------------------------*/
+      // read from memory if load instruction
+      assign MemRead = (opcode == `OPCODE_LOAD);
 
    // branch is activated for branch
    assign Jump = (opcode == `OPCODE_JAL) || (opcode == `OPCODE_JALR);
@@ -259,14 +257,14 @@ module SingleCycleCPU(halt, clk, rst);
                         ((funct3 == `FUNC_LB) || (funct3 == `FUNC_LH) || (funct3 == `FUNC_LW) || (funct3 == `FUNC_LBU) || (funct3 == `FUNC_LHU)));
    
    // validity checker for store (sb, sh, sw)
-   wire invalid_store = !(opcode == `OPCODE_STORE) && 
-                     ((funct3 == `FUNC_SB) ||
+   wire invalid_store = (opcode == `OPCODE_STORE) && 
+                     !((funct3 == `FUNC_SB) ||
                      (funct3 == `FUNC_SH) ||
                      (funct3 == `FUNC_SW)
                    );
 
    // validity check for lui
-   wire invalid_lui = !(opcode == `OPCODE_LOADI);
+   wire invalid_lui = !(opcode == `OPCODE_LUI);
 
    // validity check for auipc
    wire invalid_auipc = !(opcode == `OPCODE_AUIPC);
@@ -315,7 +313,7 @@ module SingleCycleCPU(halt, clk, rst);
 
    assign MemWrEn = (opcode == `OPCODE_STORE); // Change this to allow stores, it allows stores
    assign RWrEn = !halt && (((opcode == OPCODE_COMPUTE) || (opcode == OPCODE_COMPUTE_IMM) || (opcode == OPCODE_LOAD) || (opcode == OPCODE_JAL) || 
-                  (opcode == OPCODE_JALR) || (opcode == OPCODE_LOADI) || (opcode == OPCODE_AUIPC)));  // At the moment every instruction will write to the register file
+                  (opcode == OPCODE_JALR) || (opcode == OPCODE_LUI) || (opcode == OPCODE_AUIPC)));  // At the moment every instruction will write to the register file
    assign DataAddr = Rdata1 + immediate;
    assign StoreData = Rdata2;
 
@@ -352,8 +350,6 @@ module ExecutionUnit(out, opA, opB, func, auxFunc);
                             xor_result, mul_result, mulh_result, mulhsu_result, mulhu_result, div_result, divu_result, rem_result, remu_result;
    // for compute immediates
    wire [`WORD_WIDTH-1:0]  addi_result, slti_result, sltiu_result, xori_result, ori_result, andi_result, slli_result, srli_result, srai_result;
-
-   // wire [`WORD_WIDTH-1:0]  lui_result, auipc_result, jal_result, jalr_result;
  
    // wire for operation selection
     wire [31:0] shift_amount;   // for amount to shift by
@@ -405,13 +401,6 @@ module ExecutionUnit(out, opA, opB, func, auxFunc);
     assign srli_result = opA >> immediate[4:0];
     assign srai_result = $signed(opA) >>> immediate[4:0];
 
-    // for u types (lui, auipc)
-    // assign lui_result = {immediate[31:12], 12'b0};
-    // assign auipc_result = PC + {immediate[31:12], 12'b0};
-
-    // for jal and jalr
-    // assign jal_result = PC + 4;
-    // assign jalr_result = (opA + immediate) & ~1;         // we use masking by ANDing with 1 so bit 0 is always 0
 
    assign out = (opcode == `OPCODE_COMPUTE) ? (
                            (func == `FUNC_OR) ? or_result : (func == `FUNC_AND) ? and_result :
