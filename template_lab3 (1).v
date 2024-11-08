@@ -175,22 +175,12 @@ module SingleCycleCPU(halt, clk, rst);
    wire [`WORD_WIDTH-1:0] immediate_j = {{12{InstWord[31]}}, InstWord[19:12], InstWord[20], InstWord[30:21], 1'b0};      // sign extend the MSB  
 
    // to choose the correct immediate value
-   wire [31:0] immediate =  (opcode == `OPCODE_COMPUTE_IMM|| opcode == `OPCODE_LOAD || opcode == `OPCODE_JALR ? immediate_i) :
-                            (opcode == `OPCODE_STORE) ? immediate_s;
-                            (opcode == `OPCODE_BRANCH) ? immediate_b;
-                            (opcode == `OPCODE_JAL) ? immediate_j;
-                            (opcode == `OPCODE_LOADI || opcode == `OPCODE_AUIPC) ? immediate_u : 32'b0;
+   wire [`WORD_WIDTH-1:0] immediate = (opcode == `OPCODE_COMPUTE_IMM || opcode == `OPCODE_LOAD || opcode == `OPCODE_JALR) ? immediate_i :
+                        (opcode == `OPCODE_STORE) ? immediate_s : (opcode == `OPCODE_BRANCH) ? immediate_b :
+                        (opcode == `OPCODE_JAL) ? immediate_j : (opcode == `OPCODE_LOADI || opcode == `OPCODE_AUIPC) ? immediate_u : 32'b0;
    /*---------------------------------control------------------------------*/
-   // RegWrite = 1 , if opcode is compute, compute immediate, load, jal, jalr, loadi, or auipc
-   assign RegWrite = (opcode == `OPCODE_COMPUTE) || (opcode == `OPCODE_COMPUTE_IMM) ||
-                    (opcode == `OPCODE_LOAD) || (opcode == `OPCODE_JAL) || (opcode == `OPCODE_JALR) || (opcode == `OPCODE_LOADI) ||
-                    (opcode == `OPCODE_AUIPC);
-
    // read from memory if load instruction
    assign MemRead = (opcode == `OPCODE_LOAD);
-
-   // write to memory for store
-   assign MemWrEn = (opcode == `OPCODE_STORE);
 
    // branch is activated for branch
    assign Jump = (opcode == `OPCODE_JAL) || (opcode == `OPCODE_JALR);
@@ -228,31 +218,31 @@ module SingleCycleCPU(halt, clk, rst);
 
    wire invalid_computes = !((opcode == `OPCODE_COMPUTE) && (
                            // for ADD and SUB
-                           ((funct3 == `FUNC_ADD_SUB) &&  ((funct7 == `AUX_FUNC_ADD) || (funct7 == `AUX_FUNC_SUB))) ||
+                              ((funct3 == `FUNC_ADD_SUB) &&  ((funct7 == `AUX_FUNC_ADD) || (funct7 == `AUX_FUNC_SUB))) ||
                            // for multiplications
-                           ((funct3 == `FUNC_MUL) && (funct7 == `AUX_FUNC_M)) ||
-                           ((funct3 == `FUNC_MULH) && (funct7 == `AUX_FUNC_M)) ||
-                           ((funct3 == `FUNC_MULHSU) && (funct7 == `AUX_FUNC_M)) ||
-                           ((funct3 == `FUNC_MULHU) && (funct7 == `AUX_FUNC_M)) ||
+                              ((funct3 == `FUNC_MUL) && (funct7 == `AUX_FUNC_M)) ||
+                              ((funct3 == `FUNC_MULH) && (funct7 == `AUX_FUNC_M)) ||
+                              ((funct3 == `FUNC_MULHSU) && (funct7 == `AUX_FUNC_M)) ||
+                              ((funct3 == `FUNC_MULHU) && (funct7 == `AUX_FUNC_M)) ||
                            // for sll
-                           ((funct3 == `FUNC_SLL) && (funct7 == `AUX_FUNC_ADD)) ||
+                              ((funct3 == `FUNC_SLL) && (funct7 == `AUX_FUNC_ADD)) ||
                            // for slt and sltu; they both have the same auxfunc as ADD (0x0)
-                           ((funct3 == `FUNC_SLT) && (funct7 == `AUX_FUNC_ADD)) ||
-                           ((funct3 == `FUNC_SLTU) && (funct7 == `AUX_FUNC_ADD)) ||
+                              ((funct3 == `FUNC_SLT) && (funct7 == `AUX_FUNC_ADD)) ||
+                              ((funct3 == `FUNC_SLTU) && (funct7 == `AUX_FUNC_ADD)) ||
                            // for OR
-                           ((funct3 == `FUNC_OR) && (funct7 == `AUX_FUNC_ADD)) ||
+                              ((funct3 == `FUNC_OR) && (funct7 == `AUX_FUNC_ADD)) ||
                            // for srl and sra; srl has auxfunc of 0x0 and sra has auxfunc of 0x20
-                           ((funct3 == `FUNC_SRL_SRA) && 
-                             ((funct7 == `AUX_FUNC_SRA_I) || (funct7 == `AUX_FUNC_ADD))) ||
+                              ((funct3 == `FUNC_SRL_SRA) && 
+                              ((funct7 == `AUX_FUNC_SRA_I) || (funct7 == `AUX_FUNC_ADD))) ||
                            // for AND; has auxfunc same as ADD (0x0)
-                           ((funct3 == `FUNC_AND) && (funct7 == `AUX_FUNC_ADD)) ||
+                              ((funct3 == `FUNC_AND) && (funct7 == `AUX_FUNC_ADD)) ||
                            // for XOR; has auxfunc same as ADD (0x0)
-                           ((funct3 == `FUNC_XOR) && (funct7 == `AUX_FUNC_ADD)) ||
+                              ((funct3 == `FUNC_XOR) && (funct7 == `AUX_FUNC_ADD)) ||
                            // for division and remainder
-                           ((funct3 == `FUNC_DIV) && (funct7 == `AUX_FUNC_M)) ||
-                           ((funct3 == `FUNC_DIVU) && (funct7 == `AUX_FUNC_M)) ||
-                           ((funct3 == `FUNC_REM) && (funct7 == `AUX_FUNC_M)) ||
-                           ((funct3 == `FUNC_REMU) && (funct7 == `AUX_FUNC_M))
+                              ((funct3 == `FUNC_DIV) && (funct7 == `AUX_FUNC_M)) ||
+                              ((funct3 == `FUNC_DIVU) && (funct7 == `AUX_FUNC_M)) ||
+                              ((funct3 == `FUNC_REM) && (funct7 == `AUX_FUNC_M)) ||
+                              ((funct3 == `FUNC_REMU) && (funct7 == `AUX_FUNC_M))
                           ));
             
    // validity check for branches, beq, bne, blt, bge, bltu, bgeu
@@ -289,10 +279,10 @@ module SingleCycleCPU(halt, clk, rst);
 
    // memory alignment checker
   wire bad_mem_alignment = (
-    ((opcode == `OPCODE_LOAD) && ((funct3 == `FUNC_LH) || (funct3 == `FUNC_LHU)) && (DataAddr % 2 != 0)) ||
-    ((opcode == `OPCODE_LOAD) && (funct3 == `FUNC_LW) && (DataAddr % 4 != 0)) ||
-    ((opcode == `OPCODE_STORE) && (funct3 == `FUNC_SH) && (DataAddr % 2 != 0)) ||
-    ((opcode == `OPCODE_STORE) && (funct3 == `FUNC_SW) && (DataAddr % 4 != 0)));
+         ((opcode == `OPCODE_LOAD) && ((funct3 == `FUNC_LH) || (funct3 == `FUNC_LHU)) && (DataAddr % 2 != 0)) ||
+         ((opcode == `OPCODE_LOAD) && (funct3 == `FUNC_LW) && (DataAddr % 4 != 0)) ||
+         ((opcode == `OPCODE_STORE) && (funct3 == `FUNC_SH) && (DataAddr % 2 != 0)) ||
+         ((opcode == `OPCODE_STORE) && (funct3 == `FUNC_SW) && (DataAddr % 4 != 0)));
 
    // now we take the value of each validity check and determine if we have any faults
    wire invalid_case = invalid_computes || invalid_CommI || invalid_branch || invalid_load ||
@@ -303,7 +293,8 @@ module SingleCycleCPU(halt, clk, rst);
    assign halt = invalid_op; 
 
 
- ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////   
+/*----------------------------------end of invalid checker ---------------------------*/
+
    // System State 
    Mem   MEM(.InstAddr(PC), .InstOut(InstWord), 
             .DataAddr(DataAddr), .DataSize(MemSize), .DataIn(StoreData), .DataOut(DataWord), .WE(MemWrEn), .CLK(clk));
@@ -323,26 +314,30 @@ module SingleCycleCPU(halt, clk, rst);
    assign funct7 = InstWord[31:25];  // auxfunc7 for R-Type
 
    assign MemWrEn = (opcode == `OPCODE_STORE); // Change this to allow stores, it allows stores
-   assign RWrEn = ((opcode == OPCODE_COMPUTE) || (opcode == OPCODE_COMPUTE_IMM) || (opcode == OPCODE_LOAD) || (opcode == OPCODE_JAL) || 
-                  (opcode == OPCODE_JALR) || (opcode == OPCODE_LOADI) || (opcode == OPCODE_AUIPC));  // At the moment every instruction will write to the register file
+   assign RWrEn = !halt && (((opcode == OPCODE_COMPUTE) || (opcode == OPCODE_COMPUTE_IMM) || (opcode == OPCODE_LOAD) || (opcode == OPCODE_JAL) || 
+                  (opcode == OPCODE_JALR) || (opcode == OPCODE_LOADI) || (opcode == OPCODE_AUIPC)));  // At the moment every instruction will write to the register file
    assign DataAddr = Rdata1 + immediate;
+   assign StoreData = Rdata2;
 
    // to determite size of mem access, we use the lower 2 bits of func3 of lds and stores
    // so 00 is 1 byte access; 01 is 2 bytes (halfword) access; and 10 is 4 bytes (word) access
 
-   assign MemSize = (funct3[1:0] ==  SIZE_BYTE) ? `SIZE_BYTE : (funct3[1:0] == `SIZE_HWORD) ? `SIZE_HWORD : `SIZE_WORD;
+   assign MemSize = (funct3[1:0] ==  `SIZE_BYTE) ? `SIZE_BYTE : (funct3[1:0] == `SIZE_HWORD) ? `SIZE_HWORD : `SIZE_WORD;
 
    // Hardwired to support R-Type instructions -- please add muxes and other control signals
-   ExecutionUnit EU(.out(RWrdata), .opA(Rdata1), .opB(Rdata2), .func(funct3), .auxFunc(funct7), .opcode(opcode));
 
+   ExecutionUnit EU(.out(RWrdata), .opA((opcode == `OPCODE_AUIPC) ? PC : Rdata1), .opB((ALUSrc ? immediate : Rdata2)), .func(funct3), .auxFunc(funct7), .opcode(opcode), .immediate(immediate));   
    // Fetch Address Datapath
    // add checks for branch and jumps
 
    assign PC_Plus_4 = PC + 4;
-   assign NPC = (opcode == `OPCODE_JAL) ? jal_result
+   // check for branches and jump before incrementing next PC
+   assign NPC = (opcode == `OPCODE_JAL) ? jump_address : (opcode == `OPCODE_JALR) ? jumpReg_address :
+                Branch ? branch_address : PC_Plus_4;
    
 endmodule // SingleCycleCPU
 
+/*--------------------------------------end of datapath---------------------------------*/
 
 // Incomplete version of Lab2 execution unit
 // You will need to extend it. Feel free to modify the interface also
