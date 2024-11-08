@@ -6,20 +6,22 @@
 final lab to implement a pipelined processor. Follow the RISC-V documentation links on Canvas
 to learn the instruction encodings and functionality. The specific instructions that you must support are:
 
-lui, auipc
-jal, jalr,
-beq, bne, blt, bge, bltu, bgeu
-lb, lh, lw, lbu, lhu
-sb, sh, sw
-addi, slti, sltiu
-xori, ori, andi
-slli, srli, srai,
-sll, slt, sltu, srl, sra
-add, sub, or, and, xor
+Control instructions:
+            lui, auipc
+            jal, jalr,
+            beq, bne, blt, bge, bltu, bgeu
 
-as well as multiply/divide instructions:
+/// memory instructions:
+            lb, lh, lw, lbu, lhu
+            sb, sh, sw
 
-mul, mulh, mulhsu, mulhu, div, divu, rem, remu
+/// compute instructions:
+            addi, slti, sltiu
+            xori, ori, andi
+            slli, srli, srai,
+            sll, slt, sltu, srl, sra
+            add, sub, or, and, xor
+            mul, mulh, mulhsu, mulhu, div, divu, rem, remu
 
 The single cycle processor will be implemented in Verilog (structural w/ continuous assigns – no
 behavioral statements) and must have the following interface and port list:
@@ -58,7 +60,6 @@ implementation for these modules. You should NOT modify them. They are:
 // store byte ; sb rs1, rs2, imm
 // store halfword ; sh rs1, rs2, imm
 // store word ; sw rs1, rs2, imm
-
 
 
 // Some useful defines...please add your own
@@ -134,14 +135,14 @@ implementation for these modules. You should NOT modify them. They are:
 `define AUX_FUNC_M    7'b0000001    // mul...remu
 `define AUX_FUNC_SRA_I     7'b0100000    // sra, srai
 `define AUX_FUNC_SLLI      7'b0000000     // slli
-
+`define AUX_FUNC_SRL       7'b0000000     // srl
 
 `define SIZE_BYTE  2'b00
 `define SIZE_HWORD 2'b01
 `define SIZE_WORD  2'b10
 
 
-// comment (yafet): I copied these two lines from lab manual (do they need to be here or no since they are already implemented later)
+
 // module Mem(InstAddr, InstOut, DataAddr, DataSize, DataIn, DataOut, WEN, CLK);
 // module RegFile(AddrA, DataOutA, AddrB, DataOutB, AddrW, DataInW, WenW, CLK);
 
@@ -153,7 +154,7 @@ module SingleCycleCPU(halt, clk, rst);
    wire [`WORD_WIDTH-1:0] DataAddr, StoreData, DataWord;
    wire [1:0]  MemSize;
    wire        MemWrEn;
-   
+
    wire [4:0]  Rsrc1, Rsrc2, Rdst;
    wire [`WORD_WIDTH-1:0] Rdata1, Rdata2, RWrdata;
    wire        RWrEn;
@@ -164,11 +165,64 @@ module SingleCycleCPU(halt, clk, rst);
    wire [6:0]  funct7;
    wire [2:0]  funct3;
 
+   wire RegWrite, MemRead, Jump, ALUSrc, MemToReg;     // additional control signals
+
+   // immediate extraction for i, u, s, b, j instructions according to their RISC32M IS
+   wire [`WORD_WIDTH-1:0] immediate_i = {{20{InstWord[31]}}, InstWord[31:20]};   // sign extend the MSB
+   wire [`WORD_WIDTH-1:0] immediate_u = {InstWord[31:12], 12'b0};       // sign extend the MSB
+   wire [`WORD_WIDTH-1:0] immediate_s = {{20{InstWord[31]}}, InstWord[31:25], InstWord[11:7]};      // sign extend the MSB  
+   wire [`WORD_WIDTH-1:0] immediate_b = {{20{InstWord[31]}}, InstWord[7], InstWord[30:25], InstWord[11:8], 1'b0};
+   wire [`WORD_WIDTH-1:0] immediate_j = {{12{InstWord[31]}}, InstWord[19:12], InstWord[20], InstWord[30:21], 1'b0};      // sign extend the MSB  
+
+   // to choose the correct immediate value
+   wire [31:0] immediate =  (opcode == `OPCODE_COMPUTE_IMM|| opcode == `OPCODE_LOAD || opcode == `OPCODE_JALR ? immediate_i) :
+                            (opcode == `OPCODE_STORE) ? immediate_s;
+                            (opcode == `OPCODE_BRANCH) ? immediate_b;
+                            (opcode == `OPCODE_JAL) ? immediate_j;
+                            (opcode == `OPCODE_LOADI || opcode == `OPCODE_AUIPC) ? immediate_u : 32'b0;
+   /*---------------------------------control------------------------------*/
+   // RegWrite = 1 , if opcode is compute, compute immediate, load, jal, jalr, loadi, or auipc
+   assign RegWrite = (opcode == `OPCODE_COMPUTE) || (opcode == `OPCODE_COMPUTE_IMM) ||
+                    (opcode == `OPCODE_LOAD) || (opcode == `OPCODE_JAL) || (opcode == `OPCODE_JALR) || (opcode == `OPCODE_LOADI) ||
+                    (opcode == `OPCODE_AUIPC);
+
+   // read from memory if load instruction
+   assign MemRead = (opcode == `OPCODE_LOAD);
+
+   // write to memory for store
+   assign MemWrEn = (opcode == `OPCODE_STORE);
+
+   // branch is activated for branch
+   assign Jump = (opcode == `OPCODE_JAL) || (opcode == `OPCODE_JALR);
+
+   // When ALUSrc is 0, the second operand for the ALU is taken from a register
+   // When ALUSrc is 1, the second operand is an immediate value
+   assign ALUSrc = !(opcode == `OPCODE_COMPUTE || opcode == `OPCODE_BRANCH);
+
+   // Memory to register control is activated for load instruction
+   assign MemToReg = (opcode == `OPCODE_LOAD);
+
+   /*------------------------------end of control------------------------------*/
+
+   wire [`WORD_WIDTH-1:0] branch_address = PC + immediate_b;    // for branch
+   wire [`WORD_WIDTH-1:0] jump_address = PC + immediate_j;      // for jump
+   wire [`WORD_WIDTH-1:0] jumpReg_address = (Rdata1 + immediate_i) & ~1;      //~1 so LSB is 0 for alignment
+
+   /*----------------------- branch checker--------------------*/
+   // checks if branch should be taken
+   // if yes, Branch is set to true
+   wire Branch = (opcode == `OPCODE_BRANCH) && 
+                  ((funct3 == `FUNC_BEQ && Rdata1 == Rdata2) || (funct3 == `FUNC_BNE && Rdata1 != Rdata2)
+                  || (funct3 == `FUNC_BLT && $signed(Rdata1) < $signed(Rdata2)) ||
+                  (funct3 == `FUNC_BGE && $signed(Rdata1) > $signed(Rdata2)) || (funct3 == `FUNC_BGEU && Rdata1 >= Rdata2)
+                  || (funct3 == `FUNC_BLTU && Rdata1 < Rdata2) );
+
+   /*--------------------end of branch checker----------------*/
+
    wire invalid_op;
 
+   /*---------------------invalid (halt) cases----------------*/
 
-
-   ///// invalid (halt) cases///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
    
    // validity check for R-TYPE computes ( add, sll, slt, sltu, srl, sra, sub, or, and, xor, mul, mulh, mulhsu, mulhu, div, divu, rem, remu)
 
@@ -271,17 +325,21 @@ module SingleCycleCPU(halt, clk, rst);
    assign MemWrEn = (opcode == `OPCODE_STORE); // Change this to allow stores, it allows stores
    assign RWrEn = ((opcode == OPCODE_COMPUTE) || (opcode == OPCODE_COMPUTE_IMM) || (opcode == OPCODE_LOAD) || (opcode == OPCODE_JAL) || 
                   (opcode == OPCODE_JALR) || (opcode == OPCODE_LOADI) || (opcode == OPCODE_AUIPC));  // At the moment every instruction will write to the register file
+   assign DataAddr = Rdata1 + immediate;
 
    // to determite size of mem access, we use the lower 2 bits of func3 of lds and stores
    // so 00 is 1 byte access; 01 is 2 bytes (halfword) access; and 10 is 4 bytes (word) access
-   assign MemSize = (func3[1:0] ==  SIZE_BYTE) ? `SIZE_BYTE : (func3[1:0] == `SIZE_HWORD) ? `SIZE_HWORD : `SIZE_WORD;
+
+   assign MemSize = (funct3[1:0] ==  SIZE_BYTE) ? `SIZE_BYTE : (funct3[1:0] == `SIZE_HWORD) ? `SIZE_HWORD : `SIZE_WORD;
 
    // Hardwired to support R-Type instructions -- please add muxes and other control signals
-   ExecutionUnit EU(.out(RWrdata), .opA(Rdata1), .opB(Rdata2), .func(funct3), .auxFunc(funct7));
+   ExecutionUnit EU(.out(RWrdata), .opA(Rdata1), .opB(Rdata2), .func(funct3), .auxFunc(funct7), .opcode(opcode));
 
    // Fetch Address Datapath
+   // add checks for branch and jumps
+
    assign PC_Plus_4 = PC + 4;
-   assign NPC = PC_Plus_4;
+   assign NPC = (opcode == `OPCODE_JAL) ? jal_result
    
 endmodule // SingleCycleCPU
 
@@ -294,46 +352,86 @@ module ExecutionUnit(out, opA, opB, func, auxFunc);
    input [2:0] 	 func;
    input [6:0] 	 auxFunc;
 
-   wire [`WORD_WIDTH-1:0] 	 addSub;
-   wire [`WORD_WIDTH-1:0] 	 or;
+   // for computes
+   wire [`WORD_WIDTH-1:0] 	 addsub_result, or_result, and_result, sll_result, slt_result, sltu_result, srl_result, sra_result,
+                            xor_result, mul_result, mulh_result, mulhsu_result, mulhu_result, div_result, divu_result, rem_result, remu_result;
+   // for compute immediates
+   wire [`WORD_WIDTH-1:0]  addi_result, slti_result, sltiu_result, xori_result, ori_result, andi_result, slli_result, srli_result, srai_result;
 
-
-   // Only supports add and subtract
-   /* 
-   if (opcode == OPCODE_COMPUTE)
-   {
-      if (func == FUNC_AND)
-      {
-         compute_out = opA & opB;
-      }
-      else if (func == FUNC_OR)
-      {
-         compute_out = opA | opB;
-      }
-      else if (func == FUNC_ADD_SUB)
-      {
-         if (auxfunc == AUX_FUNC_ADD)
-         {
-            compute_out = opA + opB;
-         }
-         else if (auxfunc == AUX_FUNC_SUB)
-         {
-            compute_out = opA - opB;
-         }
-      }
-   }
-
-   else if (opcode == OPCODE_BRANCH)
-   {
-         ....check func3 using if statements 
-   }
-   ......keep adding more opcode check if statements
-
-   */
-
-   assign addSub = (auxFunc == 7'b0100000) ? (opA - opB) : (opA + opB);
-   assign compute_out = ((opcode = OPCODE_COMPUTE) && (func = FUNC_OR) ? (opA | opB) : (func = FUNC_AND) ? (opA & opB) :
-
-   assign out = (func == 3'b000) ? addSub : 32'hXXXXXXXX;
+   // wire [`WORD_WIDTH-1:0]  lui_result, auipc_result, jal_result, jalr_result;
+ 
+   // wire for operation selection
+    wire [31:0] shift_amount;   // for amount to shift by
+    assign shift_amount = {27'b0, opB[4:0]}; //since we only need the lower 5 bits of opB for shift
    
+   // executions for the compute instructions (sll, slt, sltu, srl, sra, add, sub, or, and, xor, mul, mulh, mulhsu, mulhu, div, divu, rem, remu)
+   // for add and subtract
+    assign addSub = (auxFunc == 7'b0100000) ? (opA - opB) : (opA + opB);
+
+    // for shift operations
+    assign sll_result = opA << shift_amount;
+    assign srl_result = opA >> shift_amount;
+    assign sra_result = $signed(opA) >>> shift_amount;
+    
+    // less than operations
+    assign slt_result = {31'b0, $signed(opA) < $signed(opB)};
+    assign sltu_result = {31'b0, opA < opB};
+    
+    // logic operations
+    assign xor_result = opA ^ opB;
+    assign and_result = opA & opB;
+    assign or_result = opA | opB;
+
+    // for multiply and divide operations
+    // MULH, MULHU, and MULHSU perform the same multiplication but return
+    // the upper XLEN bits of the full 2×XLEN-bit product, for signed×signed, unsigned×unsigned, and
+    // signed×unsigned multiplication respectively
+    assign mul_result = opA * opB;
+    assign mulh_result = ($signed(opA) * $signed(opB)) >> 32;
+    assign mulhsu_result = ($signed(opA) * opB) >> 32;
+    assign mulhu_result = (opA * opB) >> 32;
+
+    // DIV and DIVU perform signed and unsigned integer division of XLEN bits by XLEN bits. REM
+    // and REMU provide the remainder of the corresponding division operation
+
+    assign div_result = $signed(opA) / $signed(opB);
+    assign divu_result = opA / opB;
+    assign rem_result = $signed(opA) % $signed(opB);
+    assign remu_result = opA % opB;
+
+    // for compute immediates (addi, slti, sltiu, xori, ori, andi, slli, srli, srai)
+    assign addi_result = opA + immediate;
+    assign slti_result = {31'b0, $signed(opA) < $signed(immediate)};
+    assign sltiu_result = {31'b0, opA < immediate};
+    assign xori_result = opA ^ immediate;
+    assign ori_result = opA | immediate;
+    assign andi_result = opA & immediate;
+    assign slli_result = opA << immediate[4:0];
+    assign srli_result = opA >> immediate[4:0];
+    assign srai_result = $signed(opA) >>> immediate[4:0];
+
+    // for u types (lui, auipc)
+    // assign lui_result = {immediate[31:12], 12'b0};
+    // assign auipc_result = PC + {immediate[31:12], 12'b0};
+
+    // for jal and jalr
+    // assign jal_result = PC + 4;
+    // assign jalr_result = (opA + immediate) & ~1;         // we use masking by ANDing with 1 so bit 0 is always 0
+
+   assign out = (opcode == `OPCODE_COMPUTE) ? (
+                           (func == `FUNC_OR) ? or_result : (func == `FUNC_AND) ? and_result :
+                           (func == `FUNC_ADD_SUB) ? (addsub_result) :
+                           (func == `FUNC_XOR) ? (xor_result) : (func == `FUNC_XORI) ? xori_result :
+                           (func == `FUNC_SLL) ? sll_result : (func == `FUNC_SRL_SRA) ? ((auxFunc == `AUX_FUNC_SRL) ? srl_result : sra_result) :
+                           (func == `FUNC_SLT) ? slt_result : (func == `FUNC_SLTU) ? sltu_result :
+                           (func == `FUNC_MUL) ? mul_result : (func == `FUNC_MULH) ? mulh_result : (func == `FUNC_MULHSU) ? mulhsu_result :
+                           (func == `FUNC_MULHU) ? mulhu_result : (func == `FUNC_DIV) ? div_result : (func == `FUNC_DIVU) ? divu_result :
+                           (func == `FUNC_REM) ? rem_result : (func == `FUNC_REMU) ? remu_result : 32'hXXXXXXXX 
+                                    ):
+               (opcode == `OPCODE_COMPUTE_IMM) ? (
+                           (func == `FUNC_ADDI) ? addi_result : (func = `FUNC_SLTI) ? slti_result : (func == `FUNC_SLTIU) ? sltiu_result :
+                           (func == `FUNC_XORI) ? xori_result : (func = `FUNC_ORI) ? ori_result : 
+                           (func == `FUNC_ANDI) ? andi_result : (func == `FUNC_SLLI) ? slli_result : (func = `FUNC_SRLI_SRAI) ? ((auxFunc == `AUX_FUNC_SRA_I) ? srai_result :srli_result) : 32'hXXXXXXXX
+                           ):
+
 endmodule // ExecutionUnit
