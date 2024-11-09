@@ -11,10 +11,10 @@ Control instructions:
             jal, jalr,
             beq, bne, blt, bge, bltu, bgeu
 
-/// memory instructions
+/// memory instructions:
             lb, lh, lw, lbu, lhu
             sb, sh, sw
-	    
+
 /// compute instructions:
             addi, slti, sltiu
             xori, ori, andi
@@ -162,6 +162,7 @@ implementation for these modules. You should NOT modify them. They are:
       wire [2:0]  funct3;
 
       wire RegWrite, MemRead, Jump, ALUSrc, MemToReg;     // additional control signals
+      wire [`WORD_WIDTH-1:0] execute_out;
 
       // immediate extraction for i, u, s, b, j instructions according to their RISC32M IS
       wire [`WORD_WIDTH-1:0] immediate_i = {{20{InstWord[31]}}, InstWord[31:20]};   // sign extend the MSB
@@ -175,6 +176,10 @@ implementation for these modules. You should NOT modify them. They are:
                            (opcode == `OPCODE_STORE) ? immediate_s : (opcode == `OPCODE_BRANCH) ? immediate_b :
                            (opcode == `OPCODE_JAL) ? immediate_j : (opcode == `OPCODE_LUI || opcode == `OPCODE_AUIPC) ? immediate_u : 32'b0;
       /*---------------------------------control------------------------------*/
+      assign RWrdata =
+         (opcode == `OPCODE_JAL || opcode == `OPCODE_JALR) ? PC_Plus_4 : (opcode == `OPCODE_LOAD) ? DataWord :
+         (opcode == `OPCODE_LUI) ? immediate : execute_out;
+
       // read from memory if load instruction
       assign MemRead = (opcode == `OPCODE_LOAD);
 
@@ -202,6 +207,8 @@ implementation for these modules. You should NOT modify them. They are:
                   || (funct3 == `FUNC_BLT && $signed(Rdata1) < $signed(Rdata2)) ||
                   (funct3 == `FUNC_BGE && $signed(Rdata1) > $signed(Rdata2)) || (funct3 == `FUNC_BGEU && Rdata1 >= Rdata2)
                   || (funct3 == `FUNC_BLTU && Rdata1 < Rdata2) );
+
+   
 
    /*--------------------end of branch checker----------------*/
 
@@ -255,11 +262,11 @@ implementation for these modules. You should NOT modify them. They are:
                         ((funct3 == `FUNC_LB) || (funct3 == `FUNC_LH) || (funct3 == `FUNC_LW) || (funct3 == `FUNC_LBU) || (funct3 == `FUNC_LHU)));
    
    // validity checker for store (sb, sh, sw)
-   wire invalid_store = (opcode == `OPCODE_STORE) && 
-                     !((funct3 == `FUNC_SB) ||
+   wire invalid_store = !((opcode == `OPCODE_STORE) && 
+                     ((funct3 == `FUNC_SB) ||
                      (funct3 == `FUNC_SH) ||
                      (funct3 == `FUNC_SW)
-                   );
+                   ));
 
    // validity check for lui
    wire invalid_lui = !(opcode == `OPCODE_LUI);
@@ -281,8 +288,15 @@ implementation for these modules. You should NOT modify them. They are:
          ((opcode == `OPCODE_STORE) && (funct3 == `FUNC_SW) && (DataAddr % 4 != 0)));
 
    // now we take the value of each validity check and determine if we have any faults
-   wire invalid_case = invalid_computes || invalid_CommI || invalid_branch || invalid_load ||
-                         invalid_store || invalid_lui || invalid_auipc || invalid_jal || invalid_jalr;
+   wire invalid_case = (opcode == `OPCODE_COMPUTE && invalid_computes) || 
+                      (opcode == `OPCODE_COMPUTE_IMM && invalid_CommI) ||
+                      (opcode == `OPCODE_BRANCH && invalid_branch) ||
+                      (opcode == `OPCODE_LOAD && invalid_load) ||
+                      (opcode == `OPCODE_STORE && invalid_store) ||
+                      (opcode == `OPCODE_LUI && invalid_lui) ||
+                      (opcode == `OPCODE_AUIPC && invalid_auipc) ||
+                      (opcode == `OPCODE_JAL && invalid_jal) ||
+                      (opcode == `OPCODE_JALR && invalid_jalr);
 
    assign invalid_op = invalid_case || bad_mem_alignment;
 
@@ -322,7 +336,7 @@ implementation for these modules. You should NOT modify them. They are:
 
    // Hardwired to support R-Type instructions -- please add muxes and other control signals
 
-   ExecutionUnit EU(.out(RWrdata), .opA((opcode == `OPCODE_AUIPC) ? PC : Rdata1), .opB((ALUSrc ? immediate : Rdata2)), .func(funct3), .auxFunc(funct7), .opcode(opcode), .immediate(immediate));   
+   ExecutionUnit EU(.out(execute_out), .opA((opcode == `OPCODE_AUIPC) ? PC : Rdata1), .opB((ALUSrc ? immediate : Rdata2)), .func(funct3), .auxFunc(funct7), .opcode(opcode), .immediate(immediate));   
    // Fetch Address Datapath
    // add checks for branch and jumps
 
