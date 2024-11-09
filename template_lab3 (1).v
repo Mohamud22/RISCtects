@@ -212,13 +212,14 @@ implementation for these modules. You should NOT modify them. They are:
                    (funct3 == `FUNC_BGEU && Rdata1 >= Rdata2) ||
                    (funct3 == `FUNC_BLTU && Rdata1 < Rdata2));
 
-   /*--------------------end of branch checker----------------*/
-
-   
-   /*---------------------invalid (halt) cases----------------*/
+   /*--------------------end of--------------*/
 
    wire invalid_op;
 
+   /*---------------------invalwire invalid_op;
+id (halt) cases----------------*/
+
+   
    // validity check for R-TYPE computes ( add, sll, slt, sltu, srl, sra, sub, or, and, xor, mul, mulh, mulhsu, mulhu, div, divu, rem, remu)
 
    wire invalid_computes = !((opcode == `OPCODE_COMPUTE) && (
@@ -377,27 +378,27 @@ endmodule // SingleCycleCPU
 // Incomplete version of Lab2 execution unit
 // You will need to extend it. Feel free to modify the interface also
 module ExecutionUnit(out, opA, opB, func, auxFunc, opcode, immediate, Rdst, Rsrc1, RWrEn);
-   output [`WORD_WIDTH-1:0] out;
-   input [`WORD_WIDTH-1:0]  opA, opB;
-   input [2:0] 	 func;
-   input [6:0] 	 auxFunc;
-   input [6:0]   opcode;
-   input [`WORD_WIDTH-1:0] immediate;
-   input [4:0]  Rdst, Rsrc1;   
-   input        RWrEn;          
+    output [`WORD_WIDTH-1:0] out;
+    input [`WORD_WIDTH-1:0]  opA, opB;
+    input [2:0]  func;
+    input [6:0]  auxFunc;
+    input [6:0]  opcode;
+    input [`WORD_WIDTH-1:0] immediate;
+    input [4:0]  Rdst, Rsrc1;   
+    input        RWrEn;          
 
-   // for computes
-   wire [`WORD_WIDTH-1:0] 	 addsub_result, or_result, and_result, sll_result, slt_result, sltu_result, srl_result, sra_result,
-                            xor_result, mul_result, mulh_result, mulhsu_result, mulhu_result, div_result, divu_result, rem_result, remu_result;
-   // for compute immediates
-   wire [`WORD_WIDTH-1:0]  addi_result, slti_result, sltiu_result, xori_result, ori_result, andi_result, slli_result, srli_result, srai_result;
+    // for computes
+    wire [`WORD_WIDTH-1:0] addsub_result, or_result, and_result, sll_result, slt_result, sltu_result, srl_result, sra_result,
+                           xor_result, mul_result, mulh_result, mulhsu_result, mulhu_result, div_result, divu_result, rem_result, remu_result;
+    // for compute immediates
+    wire [`WORD_WIDTH-1:0] addi_result, slti_result, sltiu_result, xori_result, ori_result, andi_result, slli_result, srli_result, srai_result;
  
-   // wire for operation selection
+    // wire for operation selection
     wire [31:0] shift_amount;   // for amount to shift by
     assign shift_amount = {27'b0, opB[4:0]}; //since we only need the lower 5 bits of opB for shift
    
-   // executions for the compute instructions (sll, slt, sltu, srl, sra, add, sub, or, and, xor, mul, mulh, mulhsu, mulhu, div, divu, rem, remu)
-   // for add and subtract
+    // executions for the compute instructions (sll, slt, sltu, srl, sra, add, sub, or, and, xor, mul, mulh, mulhsu, mulhu, div, divu, rem, remu)
+    // for add and subtract
     assign addSub = (auxFunc == 7'b0100000) ? (opA - opB) : (opA + opB);
 
     // for shift operations
@@ -432,17 +433,17 @@ module ExecutionUnit(out, opA, opB, func, auxFunc, opcode, immediate, Rdst, Rsrc
     assign remu_result = opA % opB;
 
     // for compute immediates (addi, slti, sltiu, xori, ori, andi, slli, srli, srai)
-    assign addi_result = opA + opB;
-    assign slti_result = {31'b0, $signed(opA) < $signed(opB)};
-    assign sltiu_result = {31'b0, opA < opB};
-    assign xori_result = opA ^ opB;
-    assign ori_result = opA | opB;
-    assign andi_result = opA & opB;
-    assign slli_result = opA << opB[4:0];
-    assign srli_result = opA >> opB[4:0];
-    assign srai_result = $signed(opA) >>> opB[4:0];
+    assign addi_result = opA + immediate;
+    assign slti_result = {31'b0, $signed(opA) < $signed(immediate)};
+    assign sltiu_result = {31'b0, opA < immediate};
+    assign xori_result = opA ^ immediate;
+    assign ori_result = opA | immediate;
+    assign andi_result = opA & immediate;
+    assign slli_result = opA << immediate[4:0];
+    assign srli_result = opA >> immediate[4:0];
+    assign srai_result = $signed(opA) >>> immediate[4:0];
     
-   assign out = (opcode == `OPCODE_COMPUTE) ? (
+    assign out = (opcode == `OPCODE_COMPUTE) ? (
                            (func == `FUNC_OR) ? or_result : (func == `FUNC_AND) ? and_result :
                            (func == `FUNC_ADD_SUB) ? (addsub_result) :
                            (func == `FUNC_XOR) ? (xor_result) : (func == `FUNC_XORI) ? xori_result :
