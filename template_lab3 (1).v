@@ -1,6 +1,6 @@
 // Template for Northwestern - CompEng 361 - Lab3 -- Version 1.1
 // Groupname: RISChitects
-// NetIDs: yah9076 ; ppq9284 
+// NetIDs: yah9076 ; ....
 // to run the code: /vol/eecs362/iverilog-new/bin/iverilog -o RISChitects_execute /home/yah9076/361labs/lab3/RISChitects_lab3.v lab3_tb.v
 /* to design a single cycle RISC-V CPU which implements the majority of the RV32IM Base Instruction Set. You will eventually use this in the
 final lab to implement a pipelined processor. Follow the RISC-V documentation links on Canvas
@@ -114,6 +114,7 @@ implementation for these modules. You should NOT modify them. They are:
 `define FUNC_SH       3'b001  // sh
 `define FUNC_SW       3'b010  // sw
 
+
 // func3 for immediates
 `define FUNC_ADDI   3'b000   // addi
 `define FUNC_SLTI   3'b010   // slti
@@ -162,7 +163,7 @@ implementation for these modules. You should NOT modify them. They are:
       wire [2:0]  funct3;
 
       wire RegWrite, MemRead, Jump, ALUSrc, MemToReg;     // additional control signals
-      wire [`WORD_WIDTH-1:0] execute_out;
+      wire [`WORD_WIDTH-1:0] out;
 
       // immediate extraction for i, u, s, b, j instructions according to their RISC32M IS
       wire [`WORD_WIDTH-1:0] immediate_i = {{20{InstWord[31]}}, InstWord[31:20]};   // sign extend the MSB
@@ -178,7 +179,7 @@ implementation for these modules. You should NOT modify them. They are:
       /*---------------------------------control------------------------------*/
       assign RWrdata =
          (opcode == `OPCODE_JAL || opcode == `OPCODE_JALR) ? PC_Plus_4 : (opcode == `OPCODE_LOAD) ? DataWord :
-         (opcode == `OPCODE_LUI) ? immediate : execute_out;
+         (opcode == `OPCODE_LUI) ? immediate : out;
 
       // read from memory if load instruction
       assign MemRead = (opcode == `OPCODE_LOAD);
@@ -329,8 +330,17 @@ implementation for these modules. You should NOT modify them. They are:
    assign funct7 = InstWord[31:25];  // auxfunc7 for R-Type
 
    assign MemWrEn = (opcode == `OPCODE_STORE); // Change this to allow stores, it allows stores
-   assign RWrEn = !halt && (((opcode == `OPCODE_COMPUTE) || (opcode == `OPCODE_COMPUTE_IMM) || (opcode == `OPCODE_LOAD) || (opcode == `OPCODE_JAL) || 
-                  (opcode == `OPCODE_JALR) || (opcode == `OPCODE_LUI) || (opcode == `OPCODE_AUIPC)));  // At the moment every instruction will write to the register file
+   // Fix register write enable logic
+   assign RWrEn = !halt && (
+                  (opcode == `OPCODE_COMPUTE_IMM) ||     // immediate operations
+                  (opcode == `OPCODE_COMPUTE) ||         // R-type operations 
+                  (opcode == `OPCODE_LOAD) ||           // loads
+                  (opcode == `OPCODE_JAL) ||           // jal
+                  (opcode == `OPCODE_JALR) ||          // jalr
+                  (opcode == `OPCODE_LUI) ||           // lui
+                  (opcode == `OPCODE_AUIPC)           // auipc
+                  );
+
    assign DataAddr = Rdata1 + immediate;
    assign StoreData = Rdata2;
 
@@ -341,9 +351,18 @@ implementation for these modules. You should NOT modify them. They are:
 
    // Hardwired to support R-Type instructions -- please add muxes and other control signals
 
-   ExecutionUnit EU(.out(execute_out), .opA((opcode == `OPCODE_AUIPC) ? PC : Rdata1), .opB((ALUSrc ? immediate : Rdata2)), .func(funct3), .auxFunc(funct7), .opcode(opcode), .immediate(immediate));   
-   // Fetch Address Datapath
-   // add checks for branch and jumps
+   ExecutionUnit EU(.out(out), 
+                   .opA((opcode == `OPCODE_AUIPC) ? PC : Rdata1), 
+                   .opB((ALUSrc ? immediate : Rdata2)), 
+                   .func(funct3), 
+                   .auxFunc(funct7), 
+                   .opcode(opcode), 
+                   .immediate(immediate),
+                   .Rdst(Rdst),          // Add these connections
+                   .Rsrc1(Rsrc1),
+                   .RWrEn(RWrEn));   
+
+   //checks for branch and jumps
 
    assign PC_Plus_4 = PC + 4;
    // check for branches and jump before incrementing next PC
@@ -356,13 +375,15 @@ endmodule // SingleCycleCPU
 
 // Incomplete version of Lab2 execution unit
 // You will need to extend it. Feel free to modify the interface also
-module ExecutionUnit(out, opA, opB, func, auxFunc, opcode, immediate);
+module ExecutionUnit(out, opA, opB, func, auxFunc, opcode, immediate, Rdst, Rsrc1, RWrEn);
    output [`WORD_WIDTH-1:0] out;
    input [`WORD_WIDTH-1:0]  opA, opB;
    input [2:0] 	 func;
    input [6:0] 	 auxFunc;
    input [6:0]   opcode;
    input [`WORD_WIDTH-1:0] immediate;
+   input [4:0]  Rdst, Rsrc1;   
+   input        RWrEn;          
 
    // for computes
    wire [`WORD_WIDTH-1:0] 	 addsub_result, or_result, and_result, sll_result, slt_result, sltu_result, srl_result, sra_result,
@@ -419,22 +440,7 @@ module ExecutionUnit(out, opA, opB, func, auxFunc, opcode, immediate);
     assign slli_result = opA << immediate[4:0];
     assign srli_result = opA >> immediate[4:0];
     assign srai_result = $signed(opA) >>> immediate[4:0];
-
-   // Add these debug statements
-   always @* begin
-      if(opcode == `OPCODE_COMPUTE_IMM && func == `FUNC_ADDI) begin
-         $display("ADDI: opA=%0d, immediate=%0d, result=%0d", 
-                  $signed(opA), $signed(immediate), $signed(addi_result));
-      end
-   end
-
-   always @* begin
-      if(opcode == `OPCODE_COMPUTE_IMM) begin
-         $display("Execute: opA=%0d opB=%0d immediate=%0d result=%0d", 
-                  $signed(opA), $signed(opB), $signed(immediate), $signed(out));
-      end
-   end
-
+    
    assign out = (opcode == `OPCODE_COMPUTE) ? (
                            (func == `FUNC_OR) ? or_result : (func == `FUNC_AND) ? and_result :
                            (func == `FUNC_ADD_SUB) ? (addsub_result) :
@@ -451,4 +457,5 @@ module ExecutionUnit(out, opA, opB, func, auxFunc, opcode, immediate);
                            (func == `FUNC_ANDI) ? andi_result : (func == `FUNC_SLLI) ? slli_result : (func == `FUNC_SRLI_SRAI) ? ((auxFunc == `AUX_FUNC_SRA_I) ? srai_result :srli_result)
                             : 32'hXXXXXXXX
               ) : 32'hXXXXXXXX;
+
 endmodule // ExecutionUnit
