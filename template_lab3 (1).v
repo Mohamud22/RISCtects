@@ -165,7 +165,7 @@ implementation for these modules. You should NOT modify them. They are:
       wire RegWrite, MemRead, Jump, ALUSrc, MemToReg;     // additional control signals
       wire [`WORD_WIDTH-1:0] out;
 
-      // immediate extraction for i, u, s, b, j instructions according to their RISC32M IS
+      /*-------------immediate extraction for i, u, s, b, j instructions according to their RISC32M IS-----------------*/
       wire [`WORD_WIDTH-1:0] immediate_i = {{20{InstWord[31]}}, InstWord[31:20]};   // sign extend the MSB
       wire [`WORD_WIDTH-1:0] immediate_u = {InstWord[31:12], 12'b0};       // sign extend the MSB
       wire [`WORD_WIDTH-1:0] immediate_s = {{20{InstWord[31]}}, InstWord[31:25], InstWord[11:7]};      // sign extend the MSB  
@@ -176,7 +176,8 @@ implementation for these modules. You should NOT modify them. They are:
       wire [`WORD_WIDTH-1:0] immediate = (opcode == `OPCODE_COMPUTE_IMM || opcode == `OPCODE_LOAD || opcode == `OPCODE_JALR) ? immediate_i :
                            (opcode == `OPCODE_STORE) ? immediate_s : (opcode == `OPCODE_BRANCH) ? immediate_b :
                            (opcode == `OPCODE_JAL) ? immediate_j : (opcode == `OPCODE_LUI || opcode == `OPCODE_AUIPC) ? immediate_u : 32'b0;
-      /*---------------------------------control------------------------------*/
+
+      /*---------------------------------------control----------------------------------------*/
       assign RWrdata =
          (opcode == `OPCODE_JAL || opcode == `OPCODE_JALR) ? PC_Plus_4 : (opcode == `OPCODE_LOAD) ? DataWord :
          (opcode == `OPCODE_LUI) ? immediate : out;
@@ -187,14 +188,14 @@ implementation for these modules. You should NOT modify them. They are:
    // branch is activated for branch
    assign Jump = (opcode == `OPCODE_JAL) || (opcode == `OPCODE_JALR);
 
-   // When ALUSrc is 0, the second operand for the ALU is taken from a register
-   // When ALUSrc is 1, the second operand is an immediate value
-   assign ALUSrc = !(opcode == `OPCODE_COMPUTE || opcode == `OPCODE_BRANCH);
+   // when ALUSrc is 0, second operand for the ALU is taken from a register
+   // when ALUSrc == 1,second operand is immediate value
+   assign ALUSrc = (opcode == `OPCODE_COMPUTE_IMM) || (opcode == `OPCODE_LOAD) || (opcode == `OPCODE_STORE);
 
-   // Memory to register control is activated for load instruction
+   // for load instruction
    assign MemToReg = (opcode == `OPCODE_LOAD);
 
-   /*------------------------------end of control------------------------------*/
+   /*----------------------------------------end of control------------------------------------*/
 
    wire [`WORD_WIDTH-1:0] branch_address = PC + immediate_b;    // for branch
    wire [`WORD_WIDTH-1:0] jump_address = PC + immediate_j;      // for jump
@@ -204,20 +205,20 @@ implementation for these modules. You should NOT modify them. They are:
    // checks if branch should be taken
    // if yes, Branch is set to true
    wire Branch = (opcode == `OPCODE_BRANCH) && 
-                  ((funct3 == `FUNC_BEQ && Rdata1 == Rdata2) || (funct3 == `FUNC_BNE && Rdata1 != Rdata2)
-                  || (funct3 == `FUNC_BLT && $signed(Rdata1) < $signed(Rdata2)) ||
-                  (funct3 == `FUNC_BGE && $signed(Rdata1) > $signed(Rdata2)) || (funct3 == `FUNC_BGEU && Rdata1 >= Rdata2)
-                  || (funct3 == `FUNC_BLTU && Rdata1 < Rdata2) );
-
-   
+                  ((funct3 == `FUNC_BEQ && Rdata1 == Rdata2) || 
+                   (funct3 == `FUNC_BNE && Rdata1 != Rdata2) ||
+                   (funct3 == `FUNC_BLT && $signed(Rdata1) < $signed(Rdata2)) ||
+                   (funct3 == `FUNC_BGE && $signed(Rdata1) >= $signed(Rdata2)) || 
+                   (funct3 == `FUNC_BGEU && Rdata1 >= Rdata2) ||
+                   (funct3 == `FUNC_BLTU && Rdata1 < Rdata2));
 
    /*--------------------end of branch checker----------------*/
 
-   wire invalid_op;
-
+   
    /*---------------------invalid (halt) cases----------------*/
 
-   
+   wire invalid_op;
+
    // validity check for R-TYPE computes ( add, sll, slt, sltu, srl, sra, sub, or, and, xor, mul, mulh, mulhsu, mulhu, div, divu, rem, remu)
 
    wire invalid_computes = !((opcode == `OPCODE_COMPUTE) && (
@@ -228,7 +229,7 @@ implementation for these modules. You should NOT modify them. They are:
                               ((funct3 == `FUNC_MULH) && (funct7 == `AUX_FUNC_M)) ||
                               ((funct3 == `FUNC_MULHSU) && (funct7 == `AUX_FUNC_M)) ||
                               ((funct3 == `FUNC_MULHU) && (funct7 == `AUX_FUNC_M)) ||
-                           // for sll
+                           // for sll (has the same funct7 as ADD / all 0s)
                               ((funct3 == `FUNC_SLL) && (funct7 == `AUX_FUNC_ADD)) ||
                            // for slt and sltu; they both have the same auxfunc as ADD (0x0)
                               ((funct3 == `FUNC_SLT) && (funct7 == `AUX_FUNC_ADD)) ||
@@ -431,15 +432,15 @@ module ExecutionUnit(out, opA, opB, func, auxFunc, opcode, immediate, Rdst, Rsrc
     assign remu_result = opA % opB;
 
     // for compute immediates (addi, slti, sltiu, xori, ori, andi, slli, srli, srai)
-    assign addi_result = opA + immediate;
-    assign slti_result = {31'b0, $signed(opA) < $signed(immediate)};
-    assign sltiu_result = {31'b0, opA < immediate};
-    assign xori_result = opA ^ immediate;
-    assign ori_result = opA | immediate;
-    assign andi_result = opA & immediate;
-    assign slli_result = opA << immediate[4:0];
-    assign srli_result = opA >> immediate[4:0];
-    assign srai_result = $signed(opA) >>> immediate[4:0];
+    assign addi_result = opA + opB;
+    assign slti_result = {31'b0, $signed(opA) < $signed(opB)};
+    assign sltiu_result = {31'b0, opA < opB};
+    assign xori_result = opA ^ opB;
+    assign ori_result = opA | opB;
+    assign andi_result = opA & opB;
+    assign slli_result = opA << opB[4:0];
+    assign srli_result = opA >> opB[4:0];
+    assign srai_result = $signed(opA) >>> opB[4:0];
     
    assign out = (opcode == `OPCODE_COMPUTE) ? (
                            (func == `FUNC_OR) ? or_result : (func == `FUNC_AND) ? and_result :
