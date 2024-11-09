@@ -1,6 +1,6 @@
 // Template for Northwestern - CompEng 361 - Lab3 -- Version 1.1
 // Groupname: RISChitects
-// NetIDs: yah9076 ; ....
+// NetIDs: yah9076 ; ppq9284 
 // to run the code: /vol/eecs362/iverilog-new/bin/iverilog -o RISChitects_execute /home/yah9076/361labs/lab3/RISChitects_lab3.v lab3_tb.v
 /* to design a single cycle RISC-V CPU which implements the majority of the RV32IM Base Instruction Set. You will eventually use this in the
 final lab to implement a pipelined processor. Follow the RISC-V documentation links on Canvas
