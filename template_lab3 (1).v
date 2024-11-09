@@ -287,8 +287,13 @@ implementation for these modules. You should NOT modify them. They are:
          ((opcode == `OPCODE_STORE) && (funct3 == `FUNC_SH) && (DataAddr % 2 != 0)) ||
          ((opcode == `OPCODE_STORE) && (funct3 == `FUNC_SW) && (DataAddr % 4 != 0)));
 
+   // Add to invalid checks - detect all-zero and undefined instructions
+   wire undefined_instruction = (InstWord == 32'hffffffff);
+   wire zero_instruction = (InstWord == 32'h00000000);
+
    // now we take the value of each validity check and determine if we have any faults
-   wire invalid_case = (opcode == `OPCODE_COMPUTE && invalid_computes) || 
+   wire invalid_case = undefined_instruction || zero_instruction ||
+                      (opcode == `OPCODE_COMPUTE && invalid_computes) || 
                       (opcode == `OPCODE_COMPUTE_IMM && invalid_CommI) ||
                       (opcode == `OPCODE_BRANCH && invalid_branch) ||
                       (opcode == `OPCODE_LOAD && invalid_load) ||
@@ -415,6 +420,20 @@ module ExecutionUnit(out, opA, opB, func, auxFunc, opcode, immediate);
     assign srli_result = opA >> immediate[4:0];
     assign srai_result = $signed(opA) >>> immediate[4:0];
 
+   // Add these debug statements
+   always @* begin
+      if(opcode == `OPCODE_COMPUTE_IMM && func == `FUNC_ADDI) begin
+         $display("ADDI: opA=%0d, immediate=%0d, result=%0d", 
+                  $signed(opA), $signed(immediate), $signed(addi_result));
+      end
+   end
+
+   always @* begin
+      if(opcode == `OPCODE_COMPUTE_IMM) begin
+         $display("Execute: opA=%0d opB=%0d immediate=%0d result=%0d", 
+                  $signed(opA), $signed(opB), $signed(immediate), $signed(out));
+      end
+   end
 
    assign out = (opcode == `OPCODE_COMPUTE) ? (
                            (func == `FUNC_OR) ? or_result : (func == `FUNC_AND) ? and_result :
